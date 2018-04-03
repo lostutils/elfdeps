@@ -27,7 +27,7 @@ use goblin::elf::header::{ELFCLASS32, ELFCLASS64, EI_CLASS, ELFMAG, SELFMAG, SIZ
 
 struct ElfDeps {
     sysroot: String,
-    lpaths: Vec<String>,
+    search_paths: Vec<String>,
     visited: HashSet<String>,
 }
 
@@ -101,7 +101,7 @@ impl ElfDeps {
                     for dyn in dyns {
                         if let goblin::elf::dyn::DT_RPATH = dyn.d_tag {
                             let rpath = &elf.strtab[dyn.d_val as usize];
-                            self.lpaths.push(rpath.to_owned());
+                            self.search_paths.push(rpath.to_owned());
                         }
                         if let goblin::elf::dyn::DT_NEEDED = dyn.d_tag {
                             let lib = &elf.dynstrtab[dyn.d_val as usize];
@@ -122,36 +122,36 @@ impl ElfDeps {
             self.get_deps(path)?.into_iter().collect();
 
         while !deps.is_empty() {
-            let dep = deps.pop_front().unwrap();
+            let libname = deps.pop_front().unwrap();
 
-            for ldpath in self.lpaths.clone().iter() {
-                let pathbuf = Path::new(&self.sysroot).join(&ldpath).join(&dep);
+            for rpath in self.search_paths.clone().iter() {
+                let pathbuf = Path::new(&self.sysroot).join(&rpath).join(&libname);
 
                 if !pathbuf.exists() {
                     continue;
                 }
 
-                let lpath = pathbuf.to_str().unwrap();
-                if get_elf_architecture(lpath)? != arch {
+                let path = pathbuf.to_str().unwrap();
+                if get_elf_architecture(path)? != arch {
                     continue;
                 }
 
-                if !self.visited.insert(dep.to_owned()) {
+                if !self.visited.insert(libname.to_owned()) {
                     continue;
                 }
 
                 // TODO: remove the sysroot clone. not sure how  to do that now :\
                 let sysroot = self.sysroot.clone();
                 let relpath = pathbuf.strip_prefix(&sysroot)?.to_str().unwrap();
-                println!("{} -> {}", dep, relpath);
+                println!("{} -> {}", libname, relpath);
 
-                if let Ok(ldeps) = self.get_deps(&lpath) {
+                if let Ok(ldeps) = self.get_deps(&path) {
                     deps.extend(ldeps);
                 }
             }
 
-            if !self.visited.contains(&dep) {
-                println!("{} -> ???", dep);
+            if !self.visited.contains(&libname) {
+                println!("{} -> ???", libname);
             }
         }
         Ok(())
@@ -163,7 +163,7 @@ fn run() -> Result<(), Error> {
     let options = Opt::from_args();
     let mut elfdeps = ElfDeps {
         sysroot: options.sysroot,
-        lpaths: parse_config(&options.confpath)?,
+        search_paths: parse_config(&options.confpath)?,
         visited: HashSet::new(),
     };
     elfdeps.populate(&options.path)?;
