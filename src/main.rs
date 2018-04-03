@@ -23,6 +23,7 @@ use failure::{err_msg, Error};
 use glob::glob;
 use std::collections::HashSet;
 use std::io::{BufRead, BufReader};
+use goblin::{Object,elf};
 use goblin::elf::header::{ELFCLASS32, ELFCLASS64, EI_CLASS, ELFMAG, SELFMAG, SIZEOF_IDENT};
 
 struct ElfDeps {
@@ -95,15 +96,15 @@ impl ElfDeps {
         };
 
         let mut deps = Vec::new();
-        return match goblin::Object::parse(&buffer)? {
-            goblin::Object::Elf(elf) => {
-                if let &Some(goblin::elf::Dynamic { ref dyns, .. }) = &elf.dynamic {
+        return match Object::parse(&buffer)? {
+            Object::Elf(elf) => {
+                if let &Some(elf::Dynamic { ref dyns, .. }) = &elf.dynamic {
                     for dyn in dyns {
-                        if let goblin::elf::dyn::DT_RPATH = dyn.d_tag {
+                        if let elf::dyn::DT_RPATH = dyn.d_tag {
                             let rpath = &elf.strtab[dyn.d_val as usize];
                             self.search_paths.push(rpath.to_owned());
                         }
-                        if let goblin::elf::dyn::DT_NEEDED = dyn.d_tag {
+                        if let elf::dyn::DT_NEEDED = dyn.d_tag {
                             let lib = &elf.dynstrtab[dyn.d_val as usize];
                             deps.push(lib.to_owned());
                         }
